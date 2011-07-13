@@ -1,0 +1,157 @@
+#!/usr/bin/env python
+import os
+import gtk
+import pango
+
+pathjoin = os.path.join
+isfile = os.path.isfile
+bname = os.path.basename
+
+class IconThemeViewerToolbar( gtk.Toolbar ):
+	def __init__( self, app ):
+		gtk.Toolbar.__init__( self )
+		self.app = app
+		self.create_theme_selector()
+		self.create_context_selector()
+		self.app.container.pack_start( self, 0, 0 )
+	
+	def set_theme_names( self, theme_names, selected=0 ):
+		model = self.theme_selector.get_model()
+		model.clear()
+		for theme_name in theme_names:
+			itr = model.append( (theme_name,) )
+		self.theme_selector.set_active( selected )
+	
+	def set_context_names( self, context_names, selected=0 ):
+		model = self.context_selector.get_model()
+		model.clear()
+		for context_name in context_names:
+			itr = model.append( (context_name,) )
+		self.context_selector.set_active( selected )
+	
+	def create_theme_selector( self ):
+		model = gtk.ListStore( str )
+		self.theme_selector = gtk.ComboBox( model )
+		self.theme_selector.connect( "changed",
+			self.on_theme_selector_changed )
+		crt = gtk.CellRendererText()
+		self.theme_selector.pack_start( crt, True )
+		self.theme_selector.add_attribute( crt, 'text', 0 )
+		self.add( gtk.Label( "Icon Theme:" ) )
+		self.add( self.theme_selector )
+	
+	def create_context_selector( self ):
+		model = gtk.ListStore( str )
+		self.context_selector = gtk.ComboBox( model )
+		self.context_selector.connect( "changed",
+			self.on_context_selector_changed )
+		crt = gtk.CellRendererText()
+		self.context_selector.pack_start( crt, True )
+		self.context_selector.add_attribute( crt, 'text', 0 )
+		self.add( gtk.Label( "Context:" ) )
+		self.add( self.context_selector )
+
+	def on_theme_selector_changed( self, combobox ):
+		index = combobox.get_active()
+		self.app.load_theme( combobox.get_model()[ index ][ 0 ] )	
+
+	def on_context_selector_changed( self, combobox ):
+		index = combobox.get_active()
+		self.app.set_context( combobox.get_model()[ index ][ 0 ] )
+
+class IconThemeViewerApp(object):
+	def __init__( self ):
+		self.theme_names = None
+		self.gtk_settings = gtk.settings_get_default()
+		self.current_theme_name = self.gtk_settings.get_property(
+			"gtk-icon-theme-name" )
+		self.current_theme = gtk.icon_theme_get_default()
+		self.current_context = self.current_theme.list_contexts()[ 0 ]
+		self.search_paths = self.current_theme.get_search_path()
+		self.load_theme_names()
+		selected = self.theme_names.index( self.current_theme_name )
+		
+		self.create_window()
+		self.toolbar = IconThemeViewerToolbar( self )
+		self.create_views()
+		self.toolbar.set_theme_names( self.theme_names, selected )
+		self.toolbar.set_context_names( self.current_theme.list_contexts() )
+		self.window.show_all()
+	
+	def create_window( self ):
+		self.window = gtk.Window()
+		self.window.set_title( "Gtk IconTheme Viewer" )
+		self.window.set_default_size( 640, 480 )
+		self.window.connect( "delete-event", self.on_exit )
+		self.window.connect( "destroy", self.on_exit )
+		self.container = gtk.VBox( False, 4 )
+		self.window.add( self.container )
+
+	def create_views( self ):
+		self.theme_view = gtk.IconView( gtk.ListStore( str ) )
+		self.theme_view.set_text_column( -1 )
+		self.theme_view.set_item_width( 150 )
+		
+		cr = gtk.CellRendererText()
+		cr.set_property( "ellipsize", pango.ELLIPSIZE_END )
+		cr.set_property( "width", 120 )
+		self.theme_view.pack_end( cr, False )
+		self.theme_view.set_attributes( cr, text=0 )
+		
+		cr = gtk.CellRendererPixbuf()
+		cr.set_property( "stock-size", gtk.ICON_SIZE_DIALOG )
+		self.theme_view.pack_start( cr, False )
+		self.theme_view.set_attributes( cr, icon_name=0 )
+		self.theme_view.set_orientation( gtk.ORIENTATION_HORIZONTAL )
+		sw = gtk.ScrolledWindow()
+		sw.add( self.theme_view )
+		sw.set_shadow_type( gtk.SHADOW_IN )
+		self.container.pack_start( sw, True, 4 )
+
+	def load_theme( self, theme_name ):
+		self.current_theme = gtk.IconTheme()
+		self.current_theme.set_custom_theme( theme_name )
+		self.current_theme_name = theme_name
+		self.reload_view()
+	
+	def reload_view( self ):
+		model = self.theme_view.get_model()
+		model.clear()
+		print self.current_theme.list_icons()
+		for icon_name in self.current_theme.list_icons( self.current_context ):
+			model.append( (icon_name,) )
+	
+	def load_theme_names( self ):
+		possible_theme_paths = []
+		self.theme_names = []
+		
+		for search_path in self.search_paths:
+			try:
+				possible_theme_paths.extend( [
+					pathjoin( search_path, entry )
+					for entry in os.listdir( search_path )
+				] )
+			except OSError:
+				pass
+					
+		for entry in possible_theme_paths:
+			theme_file = pathjoin( entry, "index.theme" )
+			if isfile( theme_file ):
+				self.theme_names.append( bname( entry ) )
+				
+		self.theme_names.sort()
+	
+	def set_context( self, context_name ):
+		self.current_context = context_name
+		self.reload_view()
+	
+	def on_exit( self, *args ):
+		gtk.main_quit()
+	
+	@classmethod
+	def run( _class ):
+		app = _class()
+		gtk.main()
+
+if __name__ == "__main__": IconThemeViewerApp.run()
+	

@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+import sys
+import os
+import re
+from optparse import OptionParser
+
+def main():
+  """usage: %prog [options] <search> <replace> <dir>
+Recursively rename files in <dir>
+  <search> python compatible regular expression
+  <replace> string with optional references to matched groups (\\0, \\1 etc.)"""
+  
+  parser = OptionParser( main.__doc__ )
+  parser.add_option( "-c", "--case-sensitive", action="store_true", dest="case_sensitive",
+    help="Case sensitive matching (default is ignore case)" )
+  parser.add_option( "-d", "--dry-run", action="store_true", dest="dry_run",
+    help="Don't actually rename files, show list of <name> <new name>" )
+  options, args = parser.parse_args()
+  
+  if len(args) != 3:
+    parser.error( "not enough arguments, expected 3 got %d" % len(args) )
+  
+  flags = re.I
+  if options.case_sensitive:
+    flags = 0
+  search = re.compile( args[0], flags )
+  replace = args[1]
+  startdir = args[2]
+  
+  if not os.path.isdir( startdir ):
+    parser.error( "cannot access '%s': No such directory" % startdir )
+  
+  def dry_run( file_path, new_file_path ):
+    print file_path, new_file_path
+  
+  if options.dry_run:
+    action = dry_run
+  else:
+    action = os.rename
+
+  for dirpath, dirnames, filenames in os.walk( startdir ):
+    for filename in filenames:
+      filepath = os.path.join( dirpath, filename )
+      match = search.search( filename )
+      if match:
+        new_filepath = os.path.join( dirpath, search.sub( replace, filename ) )
+        
+        tmp_filepath = new_filepath
+        i = 0
+        while os.path.isfile( tmp_filepath ):
+          i += 1
+          tmp_filepath = new_filepath + (".%d" % i)
+        if i != 0:
+          new_filepath = tmp_filepath
+          
+        action( filepath, new_filepath )
+
+if __name__ == "__main__":
+  main()
+

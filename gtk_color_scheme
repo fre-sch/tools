@@ -1,0 +1,42 @@
+#!/bin/sh
+KEY='/desktop/gnome/interface/gtk_color_scheme'
+TOOL=$(which gconftool-2)
+PROG=$(basename $0)
+HELP() {
+	echo "usage: $PROG OPTION"
+	echo "  -h       this text"
+	echo "  -c       clear color scheme"
+	echo "  -l FILE  load and set color scheme from FILE"
+	echo "  -s FILE  save current color scheme to FILE"
+}
+
+[ -n "$1" ] || HELP
+
+while getopts ':chl:s:' opt; do
+	case "$opt" in
+		c)
+			echo "clearing scheme"
+			"$TOOL" -t string -s "$KEY" ""
+			;;
+		l)
+			if [ -f "$OPTARG" ]; then
+				echo "loading scheme: '$OPTARG'"
+				scheme=$(cat "$OPTARG")
+				"$TOOL" -t string -s "$KEY" "$scheme"
+			else
+				echo "error loading scheme, file not found: '$OPTARG'"
+			fi
+			;;
+		s)
+			echo "saving scheme: $OPTARG"
+			"$TOOL" -g "$KEY" >> "$OPTARG"
+			;;
+		:)
+			echo "option requires a value: '-$OPTARG'"
+			HELP
+			;;
+		*)
+			HELP
+			;;
+	esac
+done
